@@ -1,0 +1,15 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(HDF5 COMPONENTS C)
+find_dependency(CURL)
+
+include("${CMAKE_CURRENT_LIST_DIR}/remfileTargets.cmake")
+
+# HDF5 include directories are propagated via $<BUILD_INTERFACE:...> only
+# (they are machine-specific paths), so re-attach the ones found above to the
+# imported target for downstream consumers.
+target_include_directories(remfile::remfile SYSTEM INTERFACE ${HDF5_INCLUDE_DIRS})
+
+check_required_components(remfile)
