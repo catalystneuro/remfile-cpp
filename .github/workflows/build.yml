@@ -55,7 +55,10 @@ jobs:
     - name: Build
       run: cmake --build build --config Release -j 2
 
-    - name: Run the test program (reads a DANDI NWB file over HTTPS)
+    - name: Run the test suite (hermetic — no network)
+      run: ctest --test-dir build --output-on-failure
+
+    - name: Run the DANDI smoke test (reads a real NWB file over HTTPS)
       run: ./build/test_remfile
 
     - name: Check installation and find_package consumption

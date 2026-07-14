@@ -98,6 +98,14 @@ size_t capture_headers(char *ptr, size_t size, size_t nmemb, void *userdata)
     return size * nmemb;
 }
 
+/* 4xx responses mean the request itself is wrong (missing file, bad URL,
+ * expired credentials); retrying cannot fix them. Transient failures (network
+ * errors, 5xx, throttling) are worth retrying. */
+bool is_permanent_http_error(long http_code)
+{
+    return http_code >= 400 && http_code < 500 && http_code != 429;
+}
+
 /* Fetch [start_byte, end_byte] (inclusive) with retries and exponential
  * backoff, matching remfile's retry policy (8 retries, 0.1 * 2^n seconds). */
 bool fetch_bytes(RemFile *f, uint64_t start_byte, uint64_t end_byte,
@@ -126,6 +134,14 @@ bool fetch_bytes(RemFile *f, uint64_t start_byte, uint64_t end_byte,
             out.size() == expected)
             return true;
 
+        if (is_permanent_http_error(http_code)) {
+            fprintf(stderr,
+                    "remfile: request for bytes %s failed permanently "
+                    "(http %ld)\n",
+                    range, http_code);
+            return false;
+        }
+
         if (try_num == kNumRequestRetries) {
             fprintf(stderr,
                     "remfile: request for bytes %s failed after %d retries "
@@ -148,35 +164,65 @@ bool fetch_bytes(RemFile *f, uint64_t start_byte, uint64_t end_byte,
  * yields the total size in the Content-Range header. */
 bool fetch_content_length(RemFile *f, uint64_t *length_out)
 {
-    std::vector<uint8_t> body;
-    HeaderCapture cap;
+    /* Retried with the same policy as fetch_bytes: this is the first request
+     * of the file's life, and a transient failure here would otherwise fail
+     * the open outright even though every subsequent read would retry. */
+    for (int try_num = 0; try_num <= kNumRequestRetries; try_num++) {
+        std::vector<uint8_t> body;
+        HeaderCapture cap;
 
-    curl_easy_reset(f->curl);
-    curl_easy_setopt(f->curl, CURLOPT_URL, f->url.c_str());
-    curl_easy_setopt(f->curl, CURLOPT_RANGE, "0-0");
-    curl_easy_setopt(f->curl, CURLOPT_WRITEFUNCTION, write_to_vector);
-    curl_easy_setopt(f->curl, CURLOPT_WRITEDATA, &body);
-    curl_easy_setopt(f->curl, CURLOPT_HEADERFUNCTION, capture_headers);
-    curl_easy_setopt(f->curl, CURLOPT_HEADERDATA, &cap);
-    curl_easy_setopt(f->curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(f->curl, CURLOPT_FAILONERROR, 1L);
+        curl_easy_reset(f->curl);
+        curl_easy_setopt(f->curl, CURLOPT_URL, f->url.c_str());
+        curl_easy_setopt(f->curl, CURLOPT_RANGE, "0-0");
+        curl_easy_setopt(f->curl, CURLOPT_WRITEFUNCTION, write_to_vector);
+        curl_easy_setopt(f->curl, CURLOPT_WRITEDATA, &body);
+        curl_easy_setopt(f->curl, CURLOPT_HEADERFUNCTION, capture_headers);
+        curl_easy_setopt(f->curl, CURLOPT_HEADERDATA, &cap);
+        curl_easy_setopt(f->curl, CURLOPT_FOLLOWLOCATION, 1L);
+        curl_easy_setopt(f->curl, CURLOPT_FAILONERROR, 1L);
 
-    CURLcode rc = curl_easy_perform(f->curl);
-    if (rc != CURLE_OK) {
-        fprintf(stderr, "remfile: error getting file length: %s\n",
-                curl_easy_strerror(rc));
-        return false;
+        CURLcode rc = curl_easy_perform(f->curl);
+        long http_code = 0;
+        curl_easy_getinfo(f->curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+        if (rc == CURLE_OK && http_code == 206 && cap.content_range_total > 0) {
+            *length_out = cap.content_range_total;
+            return true;
+        }
+
+        /* A server that answers but refuses to honor the range is a permanent
+         * condition — retrying it would just stall. Fail immediately. */
+        if (rc == CURLE_OK && http_code == 200) {
+            fprintf(stderr,
+                    "remfile: server did not honor range request (http 200) — "
+                    "byte-range support is required\n");
+            return false;
+        }
+
+        /* 4xx means the request itself is wrong (missing file, bad URL, expired
+         * credentials). Retrying cannot fix it and would just add latency. */
+        if (is_permanent_http_error(http_code)) {
+            fprintf(stderr,
+                    "remfile: error getting file length: http %ld\n", http_code);
+            return false;
+        }
+
+        if (try_num == kNumRequestRetries) {
+            fprintf(stderr,
+                    "remfile: error getting file length after %d retries "
+                    "(curl: %s, http: %ld)\n",
+                    kNumRequestRetries, curl_easy_strerror(rc), http_code);
+            return false;
+        }
+
+        double delay = 0.1 * std::pow(2.0, try_num);
+        if (f->config.verbose)
+            fprintf(stderr,
+                    "remfile: retrying file-length request after failure "
+                    "(waiting %.1f s)\n",
+                    delay);
+        std::this_thread::sleep_for(std::chrono::duration<double>(delay));
     }
-    long http_code = 0;
-    curl_easy_getinfo(f->curl, CURLINFO_RESPONSE_CODE, &http_code);
-    if (http_code == 206 && cap.content_range_total > 0) {
-        *length_out = cap.content_range_total;
-        return true;
-    }
-    fprintf(stderr,
-            "remfile: server did not honor range request (http %ld) — "
-            "byte-range support is required\n",
-            http_code);
     return false;
 }
 

@@ -49,11 +49,45 @@ target_link_libraries(remfile
     PRIVATE CURL::libcurl
 )
 
-# ---- Test program ----
+# ---- Tests ----
 
 if(REMFILE_BUILD_TESTS)
+  include(CTest)
+  include(FetchContent)
+
+  FetchContent_Declare(
+      Catch2
+      GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+      GIT_TAG v3.5.3
+  )
+  FetchContent_MakeAvailable(Catch2)
+
+  # Hermetic test suite: serves a generated HDF5 file from an in-process HTTP
+  # server, so no network access is required.
+  add_executable(remfile_tests
+      tests/test_remfile_vfd.cpp
+  )
+  target_compile_features(remfile_tests PRIVATE cxx_std_17)
+  target_include_directories(remfile_tests PRIVATE "${PROJECT_SOURCE_DIR}/tests")
+  target_link_libraries(remfile_tests
+      PRIVATE remfile::remfile Catch2::Catch2WithMain
+  )
+
+  list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
+  include(Catch)
+  catch_discover_tests(remfile_tests)
+
+  # Manual/network smoke test: reads a real NWB file from the DANDI archive.
+  # Not registered with CTest by default since it requires internet access;
+  # run it directly, or enable with REMFILE_NETWORK_TESTS=ON.
   add_executable(test_remfile tests/test_remfile.c)
   target_link_libraries(test_remfile PRIVATE remfile::remfile)
+
+  option(REMFILE_NETWORK_TESTS "Register the DANDI network smoke test with CTest" OFF)
+  if(REMFILE_NETWORK_TESTS)
+    add_test(NAME dandi_smoke_test COMMAND test_remfile)
+    set_tests_properties(dandi_smoke_test PROPERTIES TIMEOUT 300)
+  endif()
 endif()
 
 # ---- Dynamic VFD plugin ----
