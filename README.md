@@ -60,7 +60,7 @@ Or via FetchContent (no install step needed):
 include(FetchContent)
 FetchContent_Declare(remfile
     GIT_REPOSITORY https://github.com/catalystneuro/remfile-cpp.git
-    GIT_TAG v0.1.1
+    GIT_TAG v0.1.2
 )
 FetchContent_MakeAvailable(remfile)
 target_link_libraries(my_app PRIVATE remfile::remfile)
