@@ -1,5 +1,7 @@
 # remfile-cpp — an HDF5 Virtual File Driver
 
+[![Build and test](https://github.com/catalystneuro/remfile-cpp/actions/workflows/build.yml/badge.svg)](https://github.com/catalystneuro/remfile-cpp/actions/workflows/build.yml)
+
 A C++ port of the Python [remfile](https://github.com/magland/remfile)
 package, implemented as a read-only HDF5 [Virtual File Driver
 (VFD)](https://support.hdfgroup.org/documentation/hdf5/latest/_v_f_l.html).

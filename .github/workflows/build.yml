@@ -1,0 +1,131 @@
+name: Build and test
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # Build against a range of HDF5 versions. The H5FD_class_t layout changed in
+  # 1.14 (and the struct moved to H5FDdevelop.h), so the driver carries
+  # H5_VERSION_GE guards; this matrix is what keeps both branches honest.
+  hdf5-versions:
+    name: HDF5 ${{ matrix.hdf5 }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash -el {0}  # -l so the conda env is activated
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, hdf5: '1.10'}
+          - {os: ubuntu-latest, hdf5: '1.14'}
+          - {os: ubuntu-latest, hdf5: '2.0'}
+          - {os: macos-latest, hdf5: '1.14'}
+          - {os: macos-latest, hdf5: '2.0'}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up conda with HDF5 ${{ matrix.hdf5 }}
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        activate-environment: remfile
+        channels: conda-forge
+        conda-remove-defaults: true
+
+    - name: Install HDF5 and libcurl
+      run: conda install -y "hdf5=${{ matrix.hdf5 }}" libcurl
+
+    - name: Configure
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DHDF5_ROOT="$CONDA_PREFIX"
+
+    - name: Build
+      run: cmake --build build --config Release -j 2
+
+    - name: Run the test program (reads a DANDI NWB file over HTTPS)
+      run: ./build/test_remfile
+
+    - name: Check installation and find_package consumption
+      run: |
+        cmake --install build --prefix "$PWD/install"
+        # A downstream project must be able to find and link remfile::remfile
+        mkdir -p consumer && cd consumer
+        cat > CMakeLists.txt <<'EOF'
+        cmake_minimum_required(VERSION 3.15)
+        project(consumer LANGUAGES C CXX)
+        find_package(remfile REQUIRED)
+        add_executable(consumer main.c)
+        target_link_libraries(consumer PRIVATE remfile::remfile)
+        EOF
+        cat > main.c <<'EOF'
+        #include <hdf5.h>
+        #include <remfile/remfile_vfd.h>
+        int main(void) {
+            hid_t fapl = H5Pcreate(H5P_FILE_ACCESS);
+            return H5Pset_fapl_remfile(fapl, NULL) < 0 ? 1 : 0;
+        }
+        EOF
+        cmake -B build -DCMAKE_PREFIX_PATH="$PWD/../install;$CONDA_PREFIX" -DHDF5_ROOT="$CONDA_PREFIX"
+        cmake --build build
+        ./build/consumer
+
+  # The dynamically loadable VFD plugin requires HDF5 >= 1.14. Verify it can be
+  # loaded by name via HDF5_PLUGIN_PATH, with nothing linked against remfile.
+  plugin:
+    name: VFD plugin (HDF5_PLUGIN_PATH)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up conda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        activate-environment: remfile
+        channels: conda-forge
+        conda-remove-defaults: true
+
+    - name: Install HDF5 and libcurl
+      run: conda install -y "hdf5=2.0" libcurl
+
+    - name: Build the plugin
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release \
+              -DHDF5_ROOT="$CONDA_PREFIX" -DREMFILE_BUILD_PLUGIN=ON
+        cmake --build build --config Release -j 2
+
+    - name: Load the driver by name and read a remote file
+      run: |
+        cat > plugin_test.c <<'EOF'
+        #include <stdio.h>
+        #include <hdf5.h>
+        int main(void) {
+            const char *url = "https://dandiarchive.s3.amazonaws.com/blobs/d86/055/"
+                              "d8605573-4639-4b99-a6d9-e0ac13f9a7df";
+            hid_t fapl = H5Pcreate(H5P_FILE_ACCESS);
+            if (H5Pset_driver_by_name(fapl, "remfile", NULL) < 0) {
+                fprintf(stderr, "plugin not found\n");
+                return 1;
+            }
+            hid_t file = H5Fopen(url, H5F_ACC_RDONLY, fapl);
+            if (file < 0) { fprintf(stderr, "open failed\n"); return 1; }
+            printf("opened remote file via dynamically loaded remfile VFD\n");
+            H5Fclose(file);
+            return 0;
+        }
+        EOF
+        # Note: nothing here links against remfile — the driver is found at runtime.
+        cc -I"$CONDA_PREFIX/include" plugin_test.c -L"$CONDA_PREFIX/lib" -lhdf5 -o plugin_test
+        HDF5_PLUGIN_PATH="$PWD/build" ./plugin_test

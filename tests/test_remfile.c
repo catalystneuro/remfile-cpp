@@ -27,8 +27,17 @@ static double now_seconds(void)
     return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
 }
 
+/* H5Literate2 / H5L_info2_t are only available from HDF5 1.12 onwards. */
+#if H5_VERSION_GE(1, 12, 0)
+#  define REMFILE_L_INFO_T H5L_info2_t
+#  define REMFILE_LITERATE H5Literate2
+#else
+#  define REMFILE_L_INFO_T H5L_info_t
+#  define REMFILE_LITERATE H5Literate
+#endif
+
 static herr_t print_link_name(hid_t group, const char *name,
-                              const H5L_info2_t *info, void *op_data)
+                              const REMFILE_L_INFO_T *info, void *op_data)
 {
     (void)group;
     (void)info;
@@ -63,7 +72,8 @@ int main(int argc, char **argv)
     }
 
     printf("Root group contents:\n");
-    H5Literate2(file, H5_INDEX_NAME, H5_ITER_NATIVE, NULL, print_link_name, NULL);
+    REMFILE_LITERATE(
+        file, H5_INDEX_NAME, H5_ITER_NATIVE, NULL, print_link_name, NULL);
 
     hid_t dset = H5Dopen2(file, dataset_path, H5P_DEFAULT);
     if (dset < 0) {
