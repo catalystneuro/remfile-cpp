@@ -45,7 +45,11 @@ jobs:
       run: conda install -y "hdf5=${{ matrix.hdf5 }}" libcurl
 
     - name: Configure
-      run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DHDF5_ROOT="$CONDA_PREFIX"
+      # CMAKE_PREFIX_PATH so find_package(CURL) also looks in the conda env;
+      # it only searches system paths otherwise.
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" -DHDF5_ROOT="$CONDA_PREFIX"
 
     - name: Build
       run: cmake --build build --config Release -j 2
@@ -73,7 +77,8 @@ jobs:
             return H5Pset_fapl_remfile(fapl, NULL) < 0 ? 1 : 0;
         }
         EOF
-        cmake -B build -DCMAKE_PREFIX_PATH="$PWD/../install;$CONDA_PREFIX" -DHDF5_ROOT="$CONDA_PREFIX"
+        cmake -B build -DCMAKE_PREFIX_PATH="$PWD/../install;$CONDA_PREFIX" \
+              -DHDF5_ROOT="$CONDA_PREFIX"
         cmake --build build
         ./build/consumer
 
@@ -103,7 +108,8 @@ jobs:
     - name: Build the plugin
       run: |
         cmake -B build -DCMAKE_BUILD_TYPE=Release \
-              -DHDF5_ROOT="$CONDA_PREFIX" -DREMFILE_BUILD_PLUGIN=ON
+              -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" -DHDF5_ROOT="$CONDA_PREFIX" \
+              -DREMFILE_BUILD_PLUGIN=ON
         cmake --build build --config Release -j 2
 
     - name: Load the driver by name and read a remote file
