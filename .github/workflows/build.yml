@@ -25,10 +25,11 @@ jobs:
       matrix:
         include:
           - {os: ubuntu-latest, hdf5: '1.10'}
+          - {os: ubuntu-latest, hdf5: '1.12'}
           - {os: ubuntu-latest, hdf5: '1.14'}
-          - {os: ubuntu-latest, hdf5: '2.0'}
+          - {os: ubuntu-latest, hdf5: '2.1'}
           - {os: macos-latest, hdf5: '1.14'}
-          - {os: macos-latest, hdf5: '2.0'}
+          - {os: macos-latest, hdf5: '2.1'}
 
     steps:
     - name: Checkout
@@ -103,7 +104,7 @@ jobs:
         conda-remove-defaults: true
 
     - name: Install HDF5 and libcurl
-      run: conda install -y "hdf5=2.0" libcurl
+      run: conda install -y "hdf5=2.1" libcurl
 
     - name: Build the plugin
       run: |
