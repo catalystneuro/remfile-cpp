@@ -134,5 +134,7 @@ jobs:
         }
         EOF
         # Note: nothing here links against remfile — the driver is found at runtime.
-        cc -I"$CONDA_PREFIX/include" plugin_test.c -L"$CONDA_PREFIX/lib" -lhdf5 -o plugin_test
+        cc -I"$CONDA_PREFIX/include" plugin_test.c \
+           -L"$CONDA_PREFIX/lib" -lhdf5 -Wl,-rpath,"$CONDA_PREFIX/lib" \
+           -o plugin_test
         HDF5_PLUGIN_PATH="$PWD/build" ./plugin_test
