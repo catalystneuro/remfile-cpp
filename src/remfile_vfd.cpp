@@ -191,7 +191,16 @@ uint64_t py_round(double x)
     return (uint64_t)std::llround(x);
 }
 
-bool load_chunk(RemFile *f, uint64_t chunk_index)
+/* Load the chunk at chunk_index, plus read-ahead.
+ *
+ * chunks_needed is the number of chunks the *current* read still needs
+ * starting at chunk_index. The fetch is never smaller than that, so a read
+ * spanning many chunks costs one request rather than ramping into it over
+ * several round trips. (This is a deliberate improvement over the Python
+ * implementation, which only ever grows the request geometrically and so
+ * pays a full round trip per step of the ramp on large reads.) Read-ahead
+ * beyond the requested range still follows remfile's 1.7x smart loader. */
+bool load_chunk(RemFile *f, uint64_t chunk_index, uint64_t chunks_needed)
 {
     if (f->chunks.count(chunk_index)) {
         f->last_chunk_index_accessed = (int64_t)chunk_index;
@@ -199,24 +208,29 @@ bool load_chunk(RemFile *f, uint64_t chunk_index)
     }
 
     const size_t min_chunk = f->config.min_chunk_size;
+    const uint64_t max_seq = f->config.max_chunk_size / min_chunk;
 
     if ((int64_t)chunk_index == f->last_chunk_index_accessed + 1) {
         /* Sequential access: grow the request by a factor of 1.7. */
         f->chunk_sequence_length = py_round(f->chunk_sequence_length * 1.7 + 0.5);
-        uint64_t max_seq = f->config.max_chunk_size / min_chunk;
-        if (f->chunk_sequence_length > max_seq)
-            f->chunk_sequence_length = max_seq;
-        /* Don't re-fetch chunks that are already cached ahead of us. */
-        for (uint64_t j = 1; j < f->chunk_sequence_length; j++) {
-            if (f->chunks.count(chunk_index + j)) {
-                f->chunk_sequence_length = j;
-                break;
-            }
-        }
     }
     else {
         /* Non-sequential access: shrink the request. */
         f->chunk_sequence_length = py_round(f->chunk_sequence_length / 1.7 + 0.5);
+    }
+
+    /* Never fetch less than what this read already needs. */
+    if (f->chunk_sequence_length < chunks_needed)
+        f->chunk_sequence_length = chunks_needed;
+    if (f->chunk_sequence_length > max_seq)
+        f->chunk_sequence_length = max_seq;
+
+    /* Don't re-fetch chunks that are already cached ahead of us. */
+    for (uint64_t j = 1; j < f->chunk_sequence_length; j++) {
+        if (f->chunks.count(chunk_index + j)) {
+            f->chunk_sequence_length = j;
+            break;
+        }
     }
 
     uint64_t data_start = chunk_index * min_chunk;
@@ -280,7 +294,7 @@ bool remfile_read_bytes(RemFile *f, uint64_t position, size_t size, void *buf)
     uint64_t chunk_end_index   = (position + size - 1) / min_chunk;
 
     for (uint64_t ci = chunk_start_index; ci <= chunk_end_index; ci++)
-        if (!load_chunk(f, ci))
+        if (!load_chunk(f, ci, chunk_end_index - ci + 1))
             return false;
 
     auto *out = static_cast<uint8_t *>(buf);
