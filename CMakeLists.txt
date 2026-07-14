@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 
 project(
     remfile
-    VERSION 0.1.0
+    VERSION 0.1.1
     DESCRIPTION "Read-only HDF5 virtual file driver for reading remote files over HTTP(S)"
     LANGUAGES C CXX
 )
