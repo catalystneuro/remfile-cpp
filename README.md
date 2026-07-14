@@ -57,8 +57,8 @@ Or via FetchContent (no install step needed):
 ```cmake
 include(FetchContent)
 FetchContent_Declare(remfile
-    GIT_REPOSITORY https://github.com/bendichter/remfile-cpp.git
-    GIT_TAG main
+    GIT_REPOSITORY https://github.com/catalystneuro/remfile-cpp.git
+    GIT_TAG v0.1.0
 )
 FetchContent_MakeAvailable(remfile)
 target_link_libraries(my_app PRIVATE remfile::remfile)
