@@ -19,13 +19,19 @@ option(REMFILE_BUILD_PLUGIN "Build the dynamic HDF5 VFD plugin (requires HDF5 >=
 find_package(HDF5 REQUIRED COMPONENTS C)
 find_package(CURL REQUIRED)
 
+# GNU-style warning flags; MSVC's cl.exe rejects these outright (D8021), so
+# keep the list empty there rather than break downstream Windows builds.
+if(NOT MSVC)
+  set(REMFILE_WARNING_FLAGS -Wall -Wextra -Wold-style-cast -Wsign-conversion)
+endif()
+
 # ---- Library ----
 
 add_library(remfile src/remfile_vfd.cpp)
 add_library(remfile::remfile ALIAS remfile)
 
 target_compile_features(remfile PRIVATE cxx_std_17)
-target_compile_options(remfile PRIVATE -Wall -Wextra -Wold-style-cast -Wsign-conversion)
+target_compile_options(remfile PRIVATE ${REMFILE_WARNING_FLAGS})
 
 set_target_properties(remfile PROPERTIES
     EXPORT_NAME remfile
@@ -97,7 +103,7 @@ endif()
 if(REMFILE_BUILD_PLUGIN)
   add_library(remfile_vfd_plugin MODULE src/remfile_vfd.cpp)
   target_compile_features(remfile_vfd_plugin PRIVATE cxx_std_17)
-  target_compile_options(remfile_vfd_plugin PRIVATE -Wall -Wextra -Wold-style-cast -Wsign-conversion)
+  target_compile_options(remfile_vfd_plugin PRIVATE ${REMFILE_WARNING_FLAGS})
   target_compile_definitions(remfile_vfd_plugin PRIVATE REMFILE_VFD_BUILD_PLUGIN)
   target_include_directories(remfile_vfd_plugin
       PRIVATE "${PROJECT_SOURCE_DIR}/include"
