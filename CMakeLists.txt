@@ -25,6 +25,7 @@ add_library(remfile src/remfile_vfd.cpp)
 add_library(remfile::remfile ALIAS remfile)
 
 target_compile_features(remfile PRIVATE cxx_std_17)
+target_compile_options(remfile PRIVATE -Wall -Wextra -Wold-style-cast -Wsign-conversion)
 
 set_target_properties(remfile PROPERTIES
     EXPORT_NAME remfile
@@ -44,6 +45,7 @@ target_include_directories(remfile
 target_include_directories(remfile SYSTEM PUBLIC
     "$<BUILD_INTERFACE:${HDF5_INCLUDE_DIRS}>"
 )
+target_include_directories(remfile SYSTEM PRIVATE ${CURL_INCLUDE_DIRS})
 target_link_libraries(remfile
     PUBLIC ${HDF5_C_LIBRARIES}
     PRIVATE CURL::libcurl
@@ -95,6 +97,7 @@ endif()
 if(REMFILE_BUILD_PLUGIN)
   add_library(remfile_vfd_plugin MODULE src/remfile_vfd.cpp)
   target_compile_features(remfile_vfd_plugin PRIVATE cxx_std_17)
+  target_compile_options(remfile_vfd_plugin PRIVATE -Wall -Wextra -Wold-style-cast -Wsign-conversion)
   target_compile_definitions(remfile_vfd_plugin PRIVATE REMFILE_VFD_BUILD_PLUGIN)
   target_include_directories(remfile_vfd_plugin
       PRIVATE "${PROJECT_SOURCE_DIR}/include"
