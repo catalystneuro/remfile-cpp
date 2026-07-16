@@ -47,6 +47,11 @@ cmake --build build
 cmake --install build --prefix /path/to/install
 ```
 
+If HDF5 is installed in a custom location, you can specify its path using `-DHDF5_ROOT`:
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DHDF5_ROOT=/path/to/hdf5_install
+```
+
 ## Using from CMake
 
 ```cmake
