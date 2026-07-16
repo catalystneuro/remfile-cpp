@@ -41,7 +41,7 @@ constexpr size_t kDefaultMaxChunkSize = 100 * 1024 * 1024;
 constexpr int    kNumRequestRetries   = 8;
 
 #if H5_VERSION_GE(1, 14, 0)
-constexpr H5FD_class_value_t kRemFileVFDValue = (H5FD_class_value_t)566;
+constexpr H5FD_class_value_t kRemFileVFDValue = static_cast<H5FD_class_value_t>(566);
 #endif
 
 hid_t g_driver_id = H5I_INVALID_HID;
@@ -88,7 +88,7 @@ size_t capture_headers(char *ptr, size_t size, size_t nmemb, void *userdata)
     if (line.size() > sizeof(prefix) - 1) {
         std::string lower = line;
         for (auto &c : lower)
-            c = (char)tolower((unsigned char)c);
+            c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
         if (lower.compare(0, sizeof(prefix) - 1, prefix) == 0) {
             size_t slash = line.rfind('/');
             if (slash != std::string::npos)
@@ -234,7 +234,7 @@ bool fetch_content_length(RemFile *f, uint64_t *length_out)
  * +0.5 term, so ordinary llround matches). */
 uint64_t py_round(double x)
 {
-    return (uint64_t)std::llround(x);
+    return static_cast<uint64_t>(std::llround(x));
 }
 
 /* Load the chunk at chunk_index, plus read-ahead.
@@ -249,14 +249,14 @@ uint64_t py_round(double x)
 bool load_chunk(RemFile *f, uint64_t chunk_index, uint64_t chunks_needed)
 {
     if (f->chunks.count(chunk_index)) {
-        f->last_chunk_index_accessed = (int64_t)chunk_index;
+        f->last_chunk_index_accessed = static_cast<int64_t>(chunk_index);
         return true;
     }
 
     const size_t min_chunk = f->config.min_chunk_size;
     const uint64_t max_seq = f->config.max_chunk_size / min_chunk;
 
-    if ((int64_t)chunk_index == f->last_chunk_index_accessed + 1) {
+    if (static_cast<int64_t>(chunk_index) == f->last_chunk_index_accessed + 1) {
         /* Sequential access: grow the request by a factor of 1.7. */
         f->chunk_sequence_length = py_round(f->chunk_sequence_length * 1.7 + 0.5);
     }
@@ -289,7 +289,7 @@ bool load_chunk(RemFile *f, uint64_t chunk_index, uint64_t chunks_needed)
                 "remfile: loading %" PRIu64 " chunks starting at %" PRIu64
                 " (%.3f million bytes)\n",
                 f->chunk_sequence_length, chunk_index,
-                (double)(data_end - data_start + 1) / 1e6);
+                static_cast<double>(data_end - data_start + 1) / 1e6);
 
     std::vector<uint8_t> data;
     if (!fetch_bytes(f, data_start, data_end, data))
@@ -306,12 +306,12 @@ bool load_chunk(RemFile *f, uint64_t chunk_index, uint64_t chunks_needed)
             size_t piece_start = i * min_chunk;
             size_t piece_end   = std::min(piece_start + min_chunk, data.size());
             f->chunks[chunk_index + i] =
-                std::vector<uint8_t>(data.begin() + piece_start, data.begin() + piece_end);
+                std::vector<uint8_t>(data.begin() + static_cast<std::ptrdiff_t>(piece_start), data.begin() + static_cast<std::ptrdiff_t>(piece_end));
             f->chunk_order.push_back(chunk_index + i);
         }
     }
     f->last_chunk_index_accessed =
-        (int64_t)(chunk_index + f->chunk_sequence_length - 1);
+        static_cast<int64_t>(chunk_index + f->chunk_sequence_length - 1);
     return true;
 }
 
@@ -347,7 +347,7 @@ bool remfile_read_bytes(RemFile *f, uint64_t position, size_t size, void *buf)
     size_t written = 0;
     for (uint64_t ci = chunk_start_index; ci <= chunk_end_index; ci++) {
         const std::vector<uint8_t> &chunk = f->chunks[ci];
-        size_t chunk_offset = (ci == chunk_start_index) ? (size_t)(position % min_chunk) : 0;
+        size_t chunk_offset = (ci == chunk_start_index) ? static_cast<size_t>(position % min_chunk) : 0;
         size_t chunk_length = std::min(chunk.size() - chunk_offset, size - written);
         memcpy(out + written, chunk.data() + chunk_offset, chunk_length);
         written += chunk_length;
@@ -450,7 +450,7 @@ herr_t remfile_set_eoa(H5FD_t *_file, H5FD_mem_t type, haddr_t addr)
 haddr_t remfile_get_eof(const H5FD_t *_file, H5FD_mem_t type)
 {
     (void)type;
-    return (haddr_t) reinterpret_cast<const RemFile *>(_file)->length;
+    return static_cast<haddr_t>(reinterpret_cast<const RemFile *>(_file)->length);
 }
 
 herr_t remfile_read(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id, haddr_t addr,
@@ -459,7 +459,7 @@ herr_t remfile_read(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id, haddr_t addr,
     (void)type;
     (void)dxpl_id;
     auto *f = reinterpret_cast<RemFile *>(_file);
-    return remfile_read_bytes(f, (uint64_t)addr, size, buf) ? 0 : -1;
+    return remfile_read_bytes(f, static_cast<uint64_t>(addr), size, buf) ? 0 : -1;
 }
 
 herr_t remfile_write(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id, haddr_t addr,

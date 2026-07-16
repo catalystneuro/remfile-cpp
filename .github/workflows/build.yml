@@ -47,9 +47,11 @@ jobs:
 
     - name: Configure
       # CMAKE_PREFIX_PATH so find_package(CURL) also looks in the conda env;
-      # it only searches system paths otherwise.
+      # it only searches system paths otherwise. Warnings are errors in CI
+      # only, so new compiler versions don't break downstream builds.
       run: |
         cmake -B build -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_COMPILE_WARNING_AS_ERROR=ON \
               -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" -DHDF5_ROOT="$CONDA_PREFIX"
 
     - name: Build
@@ -112,6 +114,7 @@ jobs:
     - name: Build the plugin
       run: |
         cmake -B build -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_COMPILE_WARNING_AS_ERROR=ON \
               -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" -DHDF5_ROOT="$CONDA_PREFIX" \
               -DREMFILE_BUILD_PLUGIN=ON
         cmake --build build --config Release -j 2
