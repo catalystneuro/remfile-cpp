@@ -20,10 +20,22 @@
 #ifndef REMFILE_HTTP_TEST_SERVER_HPP
 #define REMFILE_HTTP_TEST_SERVER_HPP
 
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+typedef int socklen_t;
+typedef SOCKET socket_t;
+#define SHUT_RDWR SD_BOTH
+#define close_socket closesocket
+#else
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
+typedef int socket_t;
+#define close_socket ::close
+#endif
 
 #include <atomic>
 #include <cstdio>
@@ -43,12 +55,16 @@ public:
   explicit HttpTestServer(std::vector<uint8_t> data)
       : m_data(std::move(data))
   {
+#ifdef _WIN32
+    WSADATA wsaData;
+    WSAStartup(MAKEWORD(2, 2), &wsaData);
+#endif
     m_listen_fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (m_listen_fd < 0)
+    if (m_listen_fd == (socket_t)-1)
       throw std::runtime_error("HttpTestServer: socket() failed");
 
     int yes = 1;
-    ::setsockopt(m_listen_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+    ::setsockopt(m_listen_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&yes, sizeof(yes));
 
     sockaddr_in addr {};
     addr.sin_family = AF_INET;
@@ -70,7 +86,7 @@ public:
   {
     m_stop = true;
     ::shutdown(m_listen_fd, SHUT_RDWR);
-    ::close(m_listen_fd);
+    close_socket(m_listen_fd);
     if (m_thread.joinable())
       m_thread.join();
 
@@ -85,12 +101,16 @@ public:
      * the failure. */
     {
       std::lock_guard<std::mutex> lock(m_conn_mutex);
-      for (int fd : m_conn_fds)
+      for (socket_t fd : m_conn_fds)
         ::shutdown(fd, SHUT_RDWR);
     }
     for (auto& t : m_conn_threads)
       if (t.joinable())
         t.join();
+
+#ifdef _WIN32
+    WSACleanup();
+#endif
   }
 
   HttpTestServer(const HttpTestServer&) = delete;
@@ -135,8 +155,8 @@ private:
   void run()
   {
     while (!m_stop) {
-      int fd = ::accept(m_listen_fd, nullptr, nullptr);
-      if (fd < 0) {
+      socket_t fd = ::accept(m_listen_fd, nullptr, nullptr);
+      if (fd == (socket_t)-1) {
         if (m_stop)
           break;
         continue;
@@ -151,19 +171,19 @@ private:
           [this, fd]
           {
             handle_connection(fd);
-            ::close(fd);
+            close_socket(fd);
           });
     }
   }
 
   /* Read a full request header block (keep-alive: one connection may carry
    * several requests, which is exactly what the driver's curl handle does). */
-  void handle_connection(int fd)
+  void handle_connection(socket_t fd)
   {
     std::string buf;
     char chunk[4096];
     while (!m_stop) {
-      ssize_t n = ::recv(fd, chunk, sizeof(chunk), 0);
+      int n = ::recv(fd, chunk, sizeof(chunk), 0);
       if (n <= 0)
         return;
       buf.append(chunk, (size_t)n);
@@ -180,7 +200,7 @@ private:
   }
 
   /* Returns false if the connection should be closed. */
-  bool handle_request(int fd, const std::string& request)
+  bool handle_request(socket_t fd, const std::string& request)
   {
     m_request_count++;
 
@@ -190,7 +210,7 @@ private:
           "HTTP/1.1 500 Internal Server Error\r\n"
           "Content-Length: 0\r\n"
           "Connection: keep-alive\r\n\r\n";
-      ::send(fd, resp.data(), resp.size(), 0);
+      ::send(fd, resp.data(), (int)resp.size(), 0);
       return true;
     }
 
@@ -199,7 +219,7 @@ private:
           "HTTP/1.1 404 Not Found\r\n"
           "Content-Length: 0\r\n"
           "Connection: keep-alive\r\n\r\n";
-      ::send(fd, resp.data(), resp.size(), 0);
+      ::send(fd, resp.data(), (int)resp.size(), 0);
       return true;
     }
 
@@ -226,7 +246,7 @@ private:
           "HTTP/1.1 416 Range Not Satisfiable\r\n"
           "Content-Length: 0\r\n"
           "Connection: keep-alive\r\n\r\n";
-      ::send(fd, resp.data(), resp.size(), 0);
+      ::send(fd, resp.data(), (int)resp.size(), 0);
       return true;
     }
     if (end >= m_data.size())
@@ -259,12 +279,12 @@ private:
                       "Connection: keep-alive\r\n\r\n",
                       (unsigned long long)len);
     }
-    if (::send(fd, header, (size_t)hlen, 0) < 0)
+    if (::send(fd, header, hlen, 0) < 0)
       return false;
 
     size_t sent = 0;
     while (sent < len) {
-      ssize_t n = ::send(fd, m_data.data() + start + sent, (size_t)(len - sent), 0);
+      int n = ::send(fd, (const char*)(m_data.data() + start + sent), (int)(len - sent), 0);
       if (n <= 0)
         return false;
       sent += (size_t)n;
@@ -284,7 +304,7 @@ private:
   }
 
   std::vector<uint8_t> m_data;
-  int m_listen_fd = -1;
+  socket_t m_listen_fd = (socket_t)-1;
   int m_port = 0;
   std::thread m_thread;
   std::atomic<bool> m_stop {false};
@@ -297,7 +317,7 @@ private:
   std::vector<std::pair<uint64_t, uint64_t>> m_ranges;
   std::mutex m_conn_mutex;
   std::vector<std::thread> m_conn_threads;
-  std::vector<int> m_conn_fds;
+  std::vector<socket_t> m_conn_fds;
 };
 
 }  // namespace remfile_test

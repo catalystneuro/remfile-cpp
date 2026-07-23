@@ -30,6 +30,8 @@ jobs:
           - {os: ubuntu-latest, hdf5: '2.1'}
           - {os: macos-latest, hdf5: '1.14'}
           - {os: macos-latest, hdf5: '2.1'}
+          - {os: windows-latest, hdf5: '1.14'}
+          - {os: windows-latest, hdf5: '2.1'}
 
     steps:
     - name: Checkout
@@ -50,22 +52,39 @@ jobs:
       # it only searches system paths otherwise. Warnings are errors in CI
       # only, so new compiler versions don't break downstream builds.
       run: |
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          export PREFIX_PATH="$CONDA_PREFIX/Library"
+        else
+          export PREFIX_PATH="$CONDA_PREFIX"
+        fi
         cmake -B build -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_COMPILE_WARNING_AS_ERROR=ON \
-              -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" -DHDF5_ROOT="$CONDA_PREFIX"
+              -DCMAKE_PREFIX_PATH="$PREFIX_PATH" \
+              -DHDF5_ROOT="$PREFIX_PATH" \
+              -DHDF5_USE_STATIC_LIBRARIES=OFF
 
     - name: Build
       run: cmake --build build --config Release -j 2
 
     - name: Run the test suite (hermetic — no network)
-      run: ctest --test-dir build --output-on-failure
+      run: ctest --test-dir build -C Release --output-on-failure
 
     - name: Run the DANDI smoke test (reads a real NWB file over HTTPS)
-      run: ./build/test_remfile
+      run: |
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          ./build/Release/test_remfile.exe
+        else
+          ./build/test_remfile
+        fi
 
     - name: Check installation and find_package consumption
       run: |
-        cmake --install build --prefix "$PWD/install"
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          export PREFIX_PATH="$CONDA_PREFIX/Library"
+        else
+          export PREFIX_PATH="$CONDA_PREFIX"
+        fi
+        cmake --install build --config Release --prefix "$PWD/install"
         # A downstream project must be able to find and link remfile::remfile
         mkdir -p consumer && cd consumer
         cat > CMakeLists.txt <<'EOF'
@@ -83,10 +102,14 @@ jobs:
             return H5Pset_fapl_remfile(fapl, NULL) < 0 ? 1 : 0;
         }
         EOF
-        cmake -B build -DCMAKE_PREFIX_PATH="$PWD/../install;$CONDA_PREFIX" \
-              -DHDF5_ROOT="$CONDA_PREFIX"
-        cmake --build build
-        ./build/consumer
+        cmake -B build -DCMAKE_PREFIX_PATH="../install;$PREFIX_PATH" \
+              -DHDF5_ROOT="$PREFIX_PATH" -DHDF5_USE_STATIC_LIBRARIES=OFF
+        cmake --build build --config Release
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          ./build/Release/consumer.exe
+        else
+          ./build/consumer
+        fi
 
   # The dynamically loadable VFD plugin requires HDF5 >= 1.14. Verify it can be
   # loaded by name via HDF5_PLUGIN_PATH, with nothing linked against remfile.
