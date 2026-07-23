@@ -30,6 +30,8 @@ jobs:
           - {os: ubuntu-latest, hdf5: '2.1'}
           - {os: macos-latest, hdf5: '1.14'}
           - {os: macos-latest, hdf5: '2.1'}
+          - {os: windows-latest, hdf5: '1.14'}
+          - {os: windows-latest, hdf5: '2.1'}
 
     steps:
     - name: Checkout
@@ -61,7 +63,12 @@ jobs:
       run: ctest --test-dir build --output-on-failure
 
     - name: Run the DANDI smoke test (reads a real NWB file over HTTPS)
-      run: ./build/test_remfile
+      run: |
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          ./build/Release/test_remfile.exe
+        else
+          ./build/test_remfile
+        fi
 
     - name: Check installation and find_package consumption
       run: |
@@ -85,8 +92,12 @@ jobs:
         EOF
         cmake -B build -DCMAKE_PREFIX_PATH="$PWD/../install;$CONDA_PREFIX" \
               -DHDF5_ROOT="$CONDA_PREFIX"
-        cmake --build build
-        ./build/consumer
+        cmake --build build --config Release
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          ./build/Release/consumer.exe
+        else
+          ./build/consumer
+        fi
 
   # The dynamically loadable VFD plugin requires HDF5 >= 1.14. Verify it can be
   # loaded by name via HDF5_PLUGIN_PATH, with nothing linked against remfile.
