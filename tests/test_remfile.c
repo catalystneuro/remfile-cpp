@@ -12,6 +12,10 @@
 #include <string.h>
 #include <time.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include <hdf5.h>
 #include <remfile/remfile_vfd.h>
 
@@ -22,9 +26,16 @@ static const char *default_dataset =
 
 static double now_seconds(void)
 {
+#ifdef _WIN32
+    LARGE_INTEGER count, freq;
+    QueryPerformanceCounter(&count);
+    QueryPerformanceFrequency(&freq);
+    return (double)count.QuadPart / (double)freq.QuadPart;
+#else
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+#endif
 }
 
 /* H5Literate2 / H5L_info2_t are only available from HDF5 1.12 onwards. */
