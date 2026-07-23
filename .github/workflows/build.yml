@@ -52,9 +52,11 @@ jobs:
       # it only searches system paths otherwise. Warnings are errors in CI
       # only, so new compiler versions don't break downstream builds.
       run: |
-        cmake -B build -DCMAKE_BUILD_TYPE=Release \
+        conda run -n remfile cmake -B build -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_COMPILE_WARNING_AS_ERROR=ON \
-              -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" -DHDF5_ROOT="$CONDA_PREFIX"
+              -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
+              -DHDF5_ROOT="$CONDA_PREFIX" \
+              -DHDF5_USE_STATIC_LIBRARIES=OFF
 
     - name: Build
       run: cmake --build build --config Release -j 2
