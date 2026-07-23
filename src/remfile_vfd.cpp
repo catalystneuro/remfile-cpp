@@ -304,7 +304,7 @@ bool load_chunk(RemFile *f, uint64_t chunk_index, uint64_t chunks_needed)
             if (i * min_chunk >= data.size())
                 break;
             size_t piece_start = i * min_chunk;
-            size_t piece_end   = std::min(piece_start + min_chunk, data.size());
+            size_t piece_end   = (std::min)(piece_start + min_chunk, data.size());
             f->chunks[chunk_index + i] =
                 std::vector<uint8_t>(data.begin() + static_cast<std::ptrdiff_t>(piece_start), data.begin() + static_cast<std::ptrdiff_t>(piece_end));
             f->chunk_order.push_back(chunk_index + i);
@@ -348,7 +348,7 @@ bool remfile_read_bytes(RemFile *f, uint64_t position, size_t size, void *buf)
     for (uint64_t ci = chunk_start_index; ci <= chunk_end_index; ci++) {
         const std::vector<uint8_t> &chunk = f->chunks[ci];
         size_t chunk_offset = (ci == chunk_start_index) ? static_cast<size_t>(position % min_chunk) : 0;
-        size_t chunk_length = std::min(chunk.size() - chunk_offset, size - written);
+        size_t chunk_length = (std::min)(chunk.size() - chunk_offset, size - written);
         memcpy(out + written, chunk.data() + chunk_offset, chunk_length);
         written += chunk_length;
     }
