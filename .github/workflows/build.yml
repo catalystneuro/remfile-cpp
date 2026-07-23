@@ -102,7 +102,7 @@ jobs:
             return H5Pset_fapl_remfile(fapl, NULL) < 0 ? 1 : 0;
         }
         EOF
-        cmake -B build -DCMAKE_PREFIX_PATH="$PWD/../install;$PREFIX_PATH" \
+        cmake -B build -DCMAKE_PREFIX_PATH="../install;$PREFIX_PATH" \
               -DHDF5_ROOT="$PREFIX_PATH" -DHDF5_USE_STATIC_LIBRARIES=OFF
         cmake --build build --config Release
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
