@@ -306,7 +306,7 @@ bool load_chunk(RemFile *f, uint64_t chunk_index, uint64_t chunks_needed)
             size_t piece_start = i * min_chunk;
             size_t piece_end   = (std::min)(piece_start + min_chunk, data.size());
             f->chunks[chunk_index + i] =
-                std::vector<uint8_t>(std::next(data.begin(), piece_start), std::next(data.begin(), piece_end));
+                std::vector<uint8_t>(data.data() + piece_start, data.data() + piece_end);
             f->chunk_order.push_back(chunk_index + i);
         }
     }
