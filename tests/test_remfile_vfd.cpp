@@ -92,10 +92,10 @@ std::vector<uint8_t> build_test_file(const std::string& path)
 
   hsize_t sdim = 5;
   hid_t sspace = H5Screate_simple(1, &sdim, nullptr);
-  int small[5] = {10, 20, 30, 40, 50};
+  int small_data[5] = {10, 20, 30, 40, 50};
   dset = H5Dcreate2(file, "small", H5T_NATIVE_INT, sspace, H5P_DEFAULT,
                     H5P_DEFAULT, H5P_DEFAULT);
-  REQUIRE(H5Dwrite(dset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, small) >= 0);
+  REQUIRE(H5Dwrite(dset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, small_data) >= 0);
   H5Dclose(dset);
 
   hid_t ascalar = H5Screate(H5S_SCALAR);
@@ -237,10 +237,10 @@ TEST_CASE("attributes and small datasets read correctly", "[vfd]")
 
   hid_t dset = H5Dopen2(file, "small", H5P_DEFAULT);
   REQUIRE(dset >= 0);
-  int small[5] = {0};
-  REQUIRE(H5Dread(dset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, small) >= 0);
-  REQUIRE(small[0] == 10);
-  REQUIRE(small[4] == 50);
+  int small_data[5] = {0};
+  REQUIRE(H5Dread(dset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, small_data) >= 0);
+  REQUIRE(small_data[0] == 10);
+  REQUIRE(small_data[4] == 50);
   H5Dclose(dset);
   H5Fclose(file);
 }
