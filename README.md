@@ -87,6 +87,15 @@ H5Pset_fapl_remfile(fapl, &config);
 
 The defaults match the Python remfile package.
 
+## Request Identification
+
+Every request sends the header `User-Agent: remfile-cpp/<version>`. S3 server
+access logs record the User-Agent, so archives such as DANDI can tell
+remfile-cpp traffic apart from other clients. This mirrors the Python remfile
+package, which sends `remfile/<version>`
+([magland/remfile#19](https://github.com/magland/remfile/pull/19)). The URL
+itself is never modified, so presigned URLs and redirects work unchanged.
+
 ## Test program
 
 ```bash

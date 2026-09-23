@@ -40,6 +40,15 @@ constexpr size_t kDefaultMaxCacheSize = 1000000000; /* 1e9, as in Python */
 constexpr size_t kDefaultMaxChunkSize = 100 * 1024 * 1024;
 constexpr int    kNumRequestRetries   = 8;
 
+/* Identifies remfile-cpp's requests in server access logs (S3 server access
+ * logs record the User-Agent), so archives such as DANDI can tell this traffic
+ * apart from other clients. Python remfile sends "remfile/<version>". A header
+ * leaves the URL untouched, so presigned URLs and redirects keep working. */
+#ifndef REMFILE_VERSION
+#  define REMFILE_VERSION "unknown"
+#endif
+constexpr const char *kUserAgent = "remfile-cpp/" REMFILE_VERSION;
+
 #if H5_VERSION_GE(1, 14, 0)
 constexpr H5FD_class_value_t kRemFileVFDValue = static_cast<H5FD_class_value_t>(566);
 #endif
@@ -118,6 +127,7 @@ bool fetch_bytes(RemFile *f, uint64_t start_byte, uint64_t end_byte,
         out.clear();
         curl_easy_reset(f->curl);
         curl_easy_setopt(f->curl, CURLOPT_URL, f->url.c_str());
+        curl_easy_setopt(f->curl, CURLOPT_USERAGENT, kUserAgent);
         curl_easy_setopt(f->curl, CURLOPT_RANGE, range);
         curl_easy_setopt(f->curl, CURLOPT_WRITEFUNCTION, write_to_vector);
         curl_easy_setopt(f->curl, CURLOPT_WRITEDATA, &out);
@@ -173,6 +183,7 @@ bool fetch_content_length(RemFile *f, uint64_t *length_out)
 
         curl_easy_reset(f->curl);
         curl_easy_setopt(f->curl, CURLOPT_URL, f->url.c_str());
+        curl_easy_setopt(f->curl, CURLOPT_USERAGENT, kUserAgent);
         curl_easy_setopt(f->curl, CURLOPT_RANGE, "0-0");
         curl_easy_setopt(f->curl, CURLOPT_WRITEFUNCTION, write_to_vector);
         curl_easy_setopt(f->curl, CURLOPT_WRITEDATA, &body);

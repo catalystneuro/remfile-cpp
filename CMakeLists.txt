@@ -32,6 +32,8 @@ add_library(remfile::remfile ALIAS remfile)
 
 target_compile_features(remfile PRIVATE cxx_std_17)
 target_compile_options(remfile PRIVATE ${REMFILE_WARNING_FLAGS})
+# Sent in the User-Agent header of every request.
+target_compile_definitions(remfile PRIVATE REMFILE_VERSION="${PROJECT_VERSION}")
 
 set_target_properties(remfile PROPERTIES
     EXPORT_NAME remfile
@@ -77,6 +79,7 @@ if(REMFILE_BUILD_TESTS)
   )
   target_compile_features(remfile_tests PRIVATE cxx_std_17)
   target_include_directories(remfile_tests PRIVATE "${PROJECT_SOURCE_DIR}/tests")
+  target_compile_definitions(remfile_tests PRIVATE REMFILE_VERSION="${PROJECT_VERSION}")
   target_link_libraries(remfile_tests
       PRIVATE remfile::remfile Catch2::Catch2WithMain
   )
@@ -104,7 +107,10 @@ if(REMFILE_BUILD_PLUGIN)
   add_library(remfile_vfd_plugin MODULE src/remfile_vfd.cpp)
   target_compile_features(remfile_vfd_plugin PRIVATE cxx_std_17)
   target_compile_options(remfile_vfd_plugin PRIVATE ${REMFILE_WARNING_FLAGS})
-  target_compile_definitions(remfile_vfd_plugin PRIVATE REMFILE_VFD_BUILD_PLUGIN)
+  target_compile_definitions(remfile_vfd_plugin PRIVATE
+      REMFILE_VFD_BUILD_PLUGIN
+      REMFILE_VERSION="${PROJECT_VERSION}"
+  )
   target_include_directories(remfile_vfd_plugin
       PRIVATE "${PROJECT_SOURCE_DIR}/include"
   )

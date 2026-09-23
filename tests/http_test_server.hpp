@@ -8,6 +8,7 @@
  *   - request_count() lets a test assert that sequential reads are coalesced
  *     into a few large range requests rather than many small ones
  *   - requested_ranges() records exactly which byte ranges were asked for
+ *   - user_agents() records the User-Agent header of every request
  *   - fail_next(n) makes the next n requests return 500, exercising the retry
  *     path without waiting on a real flaky network
  *   - set_support_ranges(false) makes the server ignore Range headers and
@@ -129,6 +130,7 @@ public:
     std::lock_guard<std::mutex> lock(m_mutex);
     m_request_count = 0;
     m_ranges.clear();
+    m_user_agents.clear();
   }
 
   /* The (start, end) byte ranges requested so far, in order. */
@@ -136,6 +138,13 @@ public:
   {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_ranges;
+  }
+
+  /* The User-Agent header of each request so far, in order ("" if absent). */
+  std::vector<std::string> user_agents() const
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_user_agents;
   }
 
   /* Total bytes handed out in successful responses. */
@@ -203,6 +212,17 @@ private:
   bool handle_request(socket_t fd, const std::string& request)
   {
     m_request_count++;
+    {
+      std::string user_agent;
+      size_t upos = find_header(request, "\r\nuser-agent:");
+      if (upos != std::string::npos) {
+        size_t vstart = request.find_first_not_of(' ', upos + 13);
+        if (vstart != std::string::npos)
+          user_agent = request.substr(vstart, request.find("\r\n", vstart) - vstart);
+      }
+      std::lock_guard<std::mutex> lock(m_mutex);
+      m_user_agents.push_back(user_agent);
+    }
 
     if (m_fail_next > 0) {
       m_fail_next--;
@@ -315,6 +335,7 @@ private:
   std::atomic<bool> m_found {true};
   mutable std::mutex m_mutex;
   std::vector<std::pair<uint64_t, uint64_t>> m_ranges;
+  std::vector<std::string> m_user_agents;
   std::mutex m_conn_mutex;
   std::vector<std::thread> m_conn_threads;
   std::vector<socket_t> m_conn_fds;
