@@ -375,6 +375,21 @@ TEST_CASE("a transient failure during open is retried", "[vfd][retry]")
   H5Fclose(file);
 }
 
+TEST_CASE("every request identifies remfile-cpp in its User-Agent", "[vfd]")
+{
+  ServedFile f;
+  hid_t file = f.open_remote();
+  REQUIRE(file >= 0);
+  read_slab(file, "contiguous", 0, 10000);
+  H5Fclose(file);
+
+  /* Covers both the file-length probe at open and the range reads. */
+  const std::vector<std::string> agents = f.server.user_agents();
+  REQUIRE(agents.size() >= 2);
+  for (const std::string& agent : agents)
+    REQUIRE(agent == "remfile-cpp/" REMFILE_VERSION);
+}
+
 TEST_CASE("a server without range support is rejected", "[vfd][errors]")
 {
   ServedFile f;
